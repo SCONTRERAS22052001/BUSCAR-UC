@@ -110,7 +110,7 @@
     <h1>Buscador de <span>UC</span></h1>
     <div class="count-badge" id="countBadge">— resultados</div>
   </div>
-  <div class="subtitle">Catálogo oficial CREG 015 de 2018 · valores instalados $ dic 2017</div>
+  <div class="subtitle">Catálogo oficial CREG 015 de 2018 · valores instalados $ dic 2017 · V 1.1</div>
   <div class="search-wrap">
     <input id="search" type="text" placeholder="Buscar por código o descripción..." autocomplete="off">
     <button class="clear-search" id="clearSearch">✕</button>
@@ -389,9 +389,15 @@ function matchesFilters(item, ignoreKey){
     if(val !== sel) return false;
   }
   if(state.search){
-    const s = normalize(state.search);
+    // Búsqueda por palabras, en cualquier orden (no requiere frase exacta).
+    // Además tolera que el usuario junte número+unidad ("12m") aunque en la
+    // descripción estén separados ("12 m"), comparando también contra una
+    // versión del texto sin espacios.
+    const tokens = normalize(state.search).split(/\s+/).filter(Boolean);
     const hay = normalize(item.uc + ' ' + item.descripcion);
-    if(!hay.includes(s)) return false;
+    const hayNoSpace = hay.replace(/\s+/g, '');
+    const allMatch = tokens.every(t => hay.includes(t) || hayNoSpace.includes(t.replace(/\s+/g, '')));
+    if(!allMatch) return false;
   }
   return true;
 }
@@ -486,8 +492,10 @@ function renderFilterGroup(container, key, label, allValues, pool){
 function selectValue(key, val){
   state.selected[key] = val;
   if(key === 'criterio'){
+    // Nivel de tensión es un filtro independiente (junto a Criterio), no un
+    // sub-filtro del criterio, así que se conserva al cambiar de criterio.
     ALL_KEYS.forEach(k => {
-      if(k !== 'criterio' && !state.locked[k]) state.selected[k] = null;
+      if(k !== 'criterio' && k !== 'nivel_tension' && !state.locked[k]) state.selected[k] = null;
     });
   }
 }
@@ -497,6 +505,9 @@ function renderFilters(){
   container.innerHTML = '';
 
   renderFilterGroup(container, 'criterio', 'Criterio', ALL_CRITERIOS, DATA);
+
+  const allNiveles = sortValues('nivel_tension', new Set(DATA.map(d => d.nivel_tension).filter(Boolean)));
+  renderFilterGroup(container, 'nivel_tension', 'Nivel de tensión', allNiveles, DATA);
 
   const selCriterio = state.selected.criterio;
   if(!selCriterio){
@@ -508,12 +519,7 @@ function renderFilters(){
   }
 
   const pool = DATA.filter(d => d.criterio === selCriterio);
-  const nivelesEnCriterio = new Set(pool.map(d => d.nivel_tension).filter(Boolean));
-  const config = [];
-  if(nivelesEnCriterio.size > 1){
-    config.push({ key:'nivel_tension', label:'Nivel de tensión' });
-  }
-  config.push(...(CRITERIO_CONFIG[selCriterio] || []));
+  const config = [...(CRITERIO_CONFIG[selCriterio] || [])];
 
   if(config.length === 0){
     const hint = document.createElement('div');
